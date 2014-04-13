@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bean:beans xmlns:bean="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.springframework.org/schema/security"
+	xmlns:p="http://www.springframework.org/schema/p"
+	xsi:schemaLocation="http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security-3.1.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd">
+	<http use-expressions="true" entry-point-ref="loginEntryPoint">
+		<intercept-url pattern="/" access="permitAll" />
+		<intercept-url pattern="/login/*" access="permitAll" />
+		<intercept-url pattern="/error/**" access="permitAll" />
+		<intercept-url pattern="/admin/**" access="hasRole('ROLE_ADMIN')" />
+		<intercept-url pattern="/**" access="hasRole('ROLE_USER')" />
+		<access-denied-handler error-page="/error" />
+		<!-- <custom-filter ref="domainFormLoginFilter" position="FORM_LOGIN_FILTER" 
+			/> -->
+		<custom-filter position="PRE_AUTH_FILTER" ref="siteminderFilter" />
+		<logout logout-url="/logout" success-handler-ref="customLogoutHandler" />
+	</http>
+	<authentication-manager alias="authenticationManager">
+		<authentication-provider ref="customPreAuthProvider" />
+	</authentication-manager>
+	<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="loginEntryPoint"
+		class="org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint">
+		<bean:constructor-arg value="/login" />
+	</bean:bean>
+	<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="domainFormLoginFilter"
+		class="com.spring.security.authetication.DomainUsernamePasswordAuthenticationFilter">
+		<property name="filterProcessesUrl" value="/login" />
+		<property name="authenticationManager" ref="authenticationManager" />
+		<property name="usernameParameter" value="username" />
+		<property name="passwordParameter" value="password" />
+		<property name="authenticationSuccessHandler">
+			<bean
+				class="org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler">
+				<property name="defaultTargetUrl" value="/landing" />
+			</bean>
+		</property>
+		<property name="authenticationFailureHandler">
+			<bean
+				class="org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler">
+				<property name="defaultFailureUrl" value="/error" />
+			</bean>
+		</property>
+	</bean:bean>
+	<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="customAutheticationProvider" class="com.spring.security.authetication.CustomAutheticationProvider">
+	</bean:bean>
+	<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="customLogoutHandler" class="com.spring.security.handler.CustomLogoutHandler">
+		<property name="defaultTargetUrl" value="/" />
+	</bean:bean>
+
+	<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="http403EntryPoint"
+		class="org.springframework.security.web.authentication.Http403ForbiddenEntryPoint">
+	</bean:bean>
+	<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="siteminderFilter"
+		class="org.springframework.security.web.authentication.preauth.RequestHeaderAuthenticationFilter">
+		<property name="principalRequestHeader" value="SM_USER" />
+		<property name="authenticationManager" ref="authenticationManager" />
+	</bean:bean>
+		<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="customPreAuthProvider" class="com.spring.security.authetication.CustomPreAuthProvider">
+		<property name="preAuthenticatedUserDetailsService" ref="preAuthenticatedUserDetailsService" />
+	</bean:bean>
+	
+	<bean:bean xmlns="http://www.springframework.org/schema/beans"
+		id="preAuthenticatedUserDetailsService" class="com.spring.security.authority.CustomPreAuthUserDetailService">
+	</bean:bean>
+	
+</bean:beans>
