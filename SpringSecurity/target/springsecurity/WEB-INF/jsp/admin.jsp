@@ -1,1 +1,0 @@
-Admin page. <a href="logout">Logout</a>
