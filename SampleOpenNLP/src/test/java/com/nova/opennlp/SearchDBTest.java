@@ -1,4 +1,4 @@
-package com.zyme.opennlp;
+package com.nova.opennlp;
 
 import java.util.List;
 import java.util.logging.Level;

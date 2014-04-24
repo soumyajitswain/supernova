@@ -16,7 +16,7 @@
  */
 
 
-package com.zyme.opennlp;
+package com.nova.opennlp;
 
 import static org.junit.Assert.assertTrue;
 

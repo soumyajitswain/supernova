@@ -1,4 +1,4 @@
-package com.zyme.opennlp;
+package com.nova.opennlp;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;

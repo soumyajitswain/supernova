@@ -1,4 +1,4 @@
-package com.zyme.natty;
+package com.nova.natty;
 
 import java.util.Date;
 import java.util.List;
