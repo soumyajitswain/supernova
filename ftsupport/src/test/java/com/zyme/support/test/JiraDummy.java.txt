@@ -1,0 +1,195 @@
+package com.zyme.support.test;
+
+import java.net.URI;
+import java.util.Arrays;
+
+import com.atlassian.jira.rest.client.api.GetCreateIssueMetadataOptions;
+import com.atlassian.jira.rest.client.api.GetCreateIssueMetadataOptionsBuilder;
+import com.atlassian.jira.rest.client.api.IssueRestClient;
+import com.atlassian.jira.rest.client.api.JiraRestClient;
+import com.atlassian.jira.rest.client.api.JiraRestClientFactory;
+import com.atlassian.jira.rest.client.api.SearchRestClient;
+import com.atlassian.jira.rest.client.api.domain.BasicIssue;
+import com.atlassian.jira.rest.client.api.domain.BasicProject;
+import com.atlassian.jira.rest.client.api.domain.CimFieldInfo;
+import com.atlassian.jira.rest.client.api.domain.CimIssueType;
+import com.atlassian.jira.rest.client.api.domain.CimProject;
+import com.atlassian.jira.rest.client.api.domain.Comment;
+import com.atlassian.jira.rest.client.api.domain.CustomFieldOption;
+import com.atlassian.jira.rest.client.api.domain.EntityHelper;
+import com.atlassian.jira.rest.client.api.domain.Issue;
+import com.atlassian.jira.rest.client.api.domain.SearchResult;
+import com.atlassian.jira.rest.client.api.domain.input.ComplexIssueInputFieldValue;
+import com.atlassian.jira.rest.client.api.domain.input.IssueInput;
+import com.atlassian.jira.rest.client.api.domain.input.IssueInputBuilder;
+import com.atlassian.jira.rest.client.internal.async.AsynchronousJiraRestClientFactory;
+
+/**
+ * This class can be used to check connectivity with Jira and create an issue
+ * @author sizu
+ *
+ */
+public class JiraDummy {
+	public static JiraLoginCredentials LC = new JiraLoginCredentials(
+			"http://my.jira.url.com",
+			"username",
+			"password"
+			);
+	public static void main(String[] args) {
+		BasicProject dummyProject = (BasicProject) findProjects(LC).iterator().next();
+		BasicIssueType dummyIssueType = findIssueTypesByProjectKey(LC, dummyProject.getKey()).iterator().next();
+		CimIssueType issueType = JiraDummy.findIssueTypeByIssueID(LC, dummyProject.getKey(), dummyIssueType.getId());
+
+		// Create New Issue
+		IssueInputBuilder issueBuilder = new IssueInputBuilder(dummyProject.getKey(), dummyIssueType.getId());
+		for (String key : issueType.getFields().keySet()) {
+			CimFieldInfo issueField = issueType.getFields().get(key);
+			String fieldID = issueField.getId();
+			if(fieldID.equals("project")) { // Skip the project field since it is already filled when issueBuilder was created
+				continue;
+			}
+			
+			if (issueField.isRequired()) {
+				try {
+					// Get allowed value for the required field
+					String allowedValue = null;
+					for(Object object: issueField.getAllowedValues()) {
+						if(object instanceof CustomFieldOption) {
+							CustomFieldOption cfo = (CustomFieldOption) object;
+							allowedValue = ""+cfo.getId(); // Convert Long to String format
+						}
+					}
+					
+					ComplexIssueInputFieldValue value = ComplexIssueInputFieldValue.with("id", allowedValue);
+					if(issueField.getSchema().getType().equals("array")) {
+						issueBuilder.setFieldValue(fieldID, Arrays.asList(value));
+					} else {
+						issueBuilder.setFieldValue(fieldID, value);
+					}
+				} catch (Exception ex) {
+					// Does not have allowed value
+					issueBuilder.setFieldValue(fieldID, "Test");
+				}
+			}
+		}
+		BasicIssue basicIssue = JiraDummy.createIssue(LC, issueBuilder.build());
+		System.out.println("Key:"+basicIssue.getKey()+" ID:"+basicIssue.getId());
+	}
+	
+	public static BasicIssue createIssue(JiraLoginCredentials lc, IssueInput newIssue) {
+		JiraRestClient jiraRestClient = createJiraRestClient(lc);
+		BasicIssue basicIssue = jiraRestClient.getIssueClient().createIssue(newIssue).claim();
+		destroyJiraRestClient(jiraRestClient);
+		return basicIssue;
+	}
+	
+	public static void addCommentToIssue(JiraLoginCredentials lc, Issue issue, String comment) {
+		JiraRestClient jiraRestClient = createJiraRestClient(lc);
+		IssueRestClient issueClient = jiraRestClient.getIssueClient();
+		issueClient.addComment(issue.getCommentsUri(), Comment.valueOf(comment)).claim();
+		destroyJiraRestClient(jiraRestClient);
+	}
+	
+	public static void deleteIssue(JiraLoginCredentials lc, Issue issue) {
+		JiraRestClient jiraRestClient = createJiraRestClient(lc);
+		IssueRestClient issueClient = jiraRestClient.getIssueClient();
+		issueClient.deleteIssue(issue.getKey(), false).claim();
+		destroyJiraRestClient(jiraRestClient);
+	}
+
+	public static Iterable findIssuesByLabel(JiraLoginCredentials lc, String label) {
+		JiraRestClient jiraRestClient = createJiraRestClient(lc);
+		SearchRestClient searchClient = jiraRestClient.getSearchClient();
+		String jql = "labels%3D"+label;
+		SearchResult results = searchClient.searchJql(jql).claim();
+		destroyJiraRestClient(jiraRestClient);
+    	return results.getIssues();
+	}
+
+	public static Issue findIssueByIssueKey(JiraLoginCredentials lc, String issueKey) {
+		JiraRestClient jiraRestClient = createJiraRestClient(lc);
+		SearchRestClient searchClient = jiraRestClient.getSearchClient();
+		String jql = "issuekey = \"" + issueKey + "\"";
+		SearchResult results = searchClient.searchJql(jql).claim();
+		destroyJiraRestClient(jiraRestClient);
+    	return results.getIssues().iterator().next();
+	}
+
+	public static Iterable findProjects(JiraLoginCredentials lc) {
+		JiraRestClient jiraRestClient = createJiraRestClient(lc);
+		Iterable projects = null;
+		try {
+			projects = jiraRestClient.getProjectClient().getAllProjects().get();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		destroyJiraRestClient(jiraRestClient);
+		return projects;
+	}
+
+	public static Iterable findIssueTypesByProjectKey(JiraLoginCredentials lc,
+			String projectKey) {
+		JiraRestClient jiraRestClient = createJiraRestClient(lc);
+		GetCreateIssueMetadataOptions options = new GetCreateIssueMetadataOptionsBuilder()
+				.withExpandedIssueTypesFields()
+				.withProjectKeys(projectKey)
+				.build();
+
+		Iterable cimProjects = jiraRestClient.getIssueClient()
+				.getCreateIssueMetadata(options).claim();
+
+		CimProject project = (CimProject) cimProjects.iterator().next();
+		Iterable issueTypes = project.getIssueTypes();
+		destroyJiraRestClient(jiraRestClient);
+		return issueTypes;
+	}
+
+	public static CimIssueType findIssueTypeByIssueID(JiraLoginCredentials lc,
+			String projectKey, Long issueTypeID) {
+		Iterable issueTypes = (Iterable) findIssueTypesByProjectKey(lc, projectKey);
+		return (CimIssueType) EntityHelper.findEntityById(issueTypes, issueTypeID);
+	}
+
+	public static CimFieldInfo findIssueFieldByIssueFieldID(JiraLoginCredentials lc,
+			String projectKey, Long issueTypeID, String issueFieldID) {
+		CimIssueType issueType = findIssueTypeByIssueID(lc,projectKey, issueTypeID);
+		return issueType.getFields().get(issueFieldID);
+	}
+	
+	private static JiraRestClient createJiraRestClient(JiraLoginCredentials lc) {
+		final JiraRestClientFactory jiraRestClientFactory = new AsynchronousJiraRestClientFactory();
+		return jiraRestClientFactory
+				.createWithBasicHttpAuthentication(URI.create(lc.getUrl()),
+						lc.getUsername(), lc.getPassword());
+	}
+
+	private static void destroyJiraRestClient(JiraRestClient jiraRestClient) {
+		try {
+			jiraRestClient.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public static class JiraLoginCredentials {
+		private String url;
+		private String username;
+		private String password;
+		public JiraLoginCredentials(String url, String username, String password) {
+			super();
+			this.url = url;
+			this.username = username;
+			this.password = password;
+		}
+		public String getUrl() {
+			return url;
+		}
+		public String getUsername() {
+			return username;
+		}
+		public String getPassword() {
+			return password;
+		}
+		
+	}
+}
